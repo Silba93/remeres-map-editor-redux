@@ -117,10 +117,10 @@ python tools/convert_legacy_data_gui.py
 
 Check `BUILDING.md` for complete step-by-step instructions.
 
-### Windows (Visual Studio 2022)
-1. Install VS 2022 with C++ desktop workload, CMake, and vcpkg.
-2. Run `build_windows.bat`.
-3. The executable will be in `build\Release\rme.exe` (or open `build\rme.sln`).
+### Windows (Visual Studio 2026)
+1. Install Visual Studio 2026 with the Desktop development with C++ workload.
+2. Double-click `Open in Visual Studio.bat` to configure and open the solution.
+3. Select Debug or Release, then click Play to build and launch `rme`.
 
 ### Linux (Ubuntu)
 1. Run `./setup_conan.sh` to install dependencies.

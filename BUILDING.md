@@ -4,60 +4,28 @@
 
 | Tool | Windows | Linux (Ubuntu) |
 |------|---------|----------------|
-| C++ Compiler | Visual Studio 2022 | GCC 11+ or Clang 14+ |
-| CMake | 3.23+ | 3.23+ |
+| C++ Compiler | Visual Studio 2026 (2022 supported) | GCC 11+ or Clang 14+ |
+| CMake | 3.28+ | 3.28+ |
 | Package Manager | vcpkg | Conan 2.x |
 
 ---
 
 ## Windows Setup
 
-### 1. Install Visual Studio 2022
-Download from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/) with **Desktop development with C++** workload.
+### Open, build, and run in Visual Studio
 
-### 2. Install CMake
-```cmd
-winget install Kitware.CMake
-```
+Install Visual Studio 2026 with the **Desktop development with C++** workload.
 
-### 3. Install vcpkg
-```cmd
-git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-C:\vcpkg\bootstrap-vcpkg.bat
-```
+1. Double-click `Open in Visual Studio.bat`.
+2. If the generated solution is missing, open the repository folder in Visual Studio and select the `vs2026-vcpkg` CMake configure preset once.
+3. In Visual Studio, choose **Debug** or **Release** from the configuration selector and choose **rme** as the startup target if it is not already selected.
+4. Click the green **Play** button (or press F5). Visual Studio builds the selected configuration and launches the editor.
 
-### 4. Build
-```cmd
-build_windows.bat
-```
-This script will:
-1. Configure the project using CMake and vcpkg.
-2. **Regenerate the Visual Studio solution** in `build\rme.sln` using CMake presets.
-3. Perform a parallel build of the project.
+The generated solution is `build-vs2026/rme.slnx`. It and all intermediate build output are disposable; CMake recreates them from the checked-in project files. vcpkg packages are kept in the ignored root `vcpkg_installed/` directory so Debug and Release share the installed dependencies.
 
-**Project Output:** `build\Release\rme.exe`  
-**VS Solution:** `build\rme.sln` (Use this file for development)  
-**Build Log:** `build.log`
+To configure without opening Visual Studio, set `VCPKG_ROOT` to the vcpkg directory inside the Visual Studio installation and run `cmake --preset vs2026-vcpkg` from the repository root.
 
 ---
-
-## Standalone Visual Studio Workspace
-
-If you prefer to work natively in Visual Studio 2022 without using the automated build scripts, you can generate a dedicated workspace:
-
-1.  Run `generate_vcproj.bat`.
-2.  Open `vcproj\rme.sln`.
-
-This will create a permanent solution in the `vcproj\ ` folder that is fully configured with all dependencies.
-
-> [!TIP]
-> Use `build_windows.bat` for quick automated builds and `generate_vcproj.bat` when you want a persistent IDE environment.
-
-> [!IMPORTANT]
-> The solution is now automatically managed by CMake. You can open `build/rme.sln` or `vcproj/rme.sln` directly to work on the project, and it will stay in sync with the source code.
-
----
-
 ## Linux (Ubuntu) Setup
 
 ### 1. Install Dependencies
