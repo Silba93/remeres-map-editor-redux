@@ -15,11 +15,14 @@
 #include "rendering/indicators/indicator_drawing_utils.h"
 #include "editor/editor.h"
 #include "editor/action_queue.h"
+#include "ui/dialogs/blacktek_zones_window.h"
 
 #include <nanovg.h>
 #include <wx/menu.h>
 #include <wx/textdlg.h>
 #include <wx/msgdlg.h>
+#include <wx/choice.h>
+#include <wx/listbox.h>
 #include <wx/aui/auibar.h>
 #include <algorithm>
 #include <array>
@@ -626,6 +629,12 @@ ZonePalettePanel::ZonePalettePanel(wxWindow* parent, wxWindowID id) :
 	PalettePanel(parent, id) {
 	auto* root_sizer = new wxBoxSizer(wxVERTICAL);
 	auto* box_sizer = new wxStaticBoxSizer(wxVERTICAL, this, "Zones");
+	mode_choice_ = new wxChoice(this, wxID_ANY);
+	mode_choice_->Append("OTBM 5 tile zones");
+	mode_choice_->Append("BlackTek named zones");
+	mode_choice_->SetFont(Theme::GetFont());
+	mode_choice_->Bind(wxEVT_CHOICE, &ZonePalettePanel::OnZoneModeChanged, this);
+	box_sizer->Add(mode_choice_, 0, wxEXPAND | wxBOTTOM, Theme::Grid(1));
 
 	// 1. TilesetGridToolbar (Filter, Sort, Expand All / Collapse All)
 	TilesetGridToolbar::Actions actions;
@@ -667,6 +676,18 @@ ZonePalettePanel::ZonePalettePanel(wxWindow* parent, wxWindowID id) :
 	// 2. Modern Zone Tree Canvas
 	canvas_ = new ZoneCanvas(this);
 	box_sizer->Add(canvas_, 1, wxEXPAND | wxBOTTOM, FromDIP(4));
+	blacktek_list_ = new wxListBox(this, wxID_ANY);
+	blacktek_list_->SetFont(Theme::GetFont());
+	blacktek_list_->SetBackgroundColour(Theme::Get(Theme::Role::Background));
+	blacktek_list_->SetForegroundColour(Theme::Get(Theme::Role::Text));
+	blacktek_list_->Bind(wxEVT_LISTBOX, [this](wxCommandEvent&) {
+		const int selection = blacktek_list_->GetSelection();
+		if (selection >= 0 && map_ && static_cast<size_t>(selection) < map_->blacktek_zones.records().size()) {
+			SelectBlackTekZone(map_->blacktek_zones.records()[static_cast<size_t>(selection)].name);
+		}
+	});
+	blacktek_list_->Bind(wxEVT_LISTBOX_DCLICK, [this](wxCommandEvent&) { OnGoToZone(); });
+	box_sizer->Add(blacktek_list_, 1, wxEXPAND | wxBOTTOM, Theme::Grid(1));
 
 	// 3. Action Button Bar (Add, Rename, Remove)
 	auto* button_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -690,6 +711,12 @@ ZonePalettePanel::ZonePalettePanel(wxWindow* parent, wxWindowID id) :
 	remove_button_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OnClickRemoveZone(); });
 	button_sizer->Add(remove_button_, 1, wxEXPAND);
 
+	goto_button_ = new wxButton(this, wxID_ANY, "Go to", wxDefaultPosition, wxSize(Theme::Grid(12), -1));
+	goto_button_->SetBitmap(IMAGE_MANAGER.GetBitmapBundle(ICON_LOCATION_ARROW));
+	goto_button_->SetFont(Theme::GetFont(9, false));
+	goto_button_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OnGoToZone(); });
+	button_sizer->Add(goto_button_, 1, wxEXPAND | wxLEFT, dip_2);
+
 	box_sizer->Add(button_sizer, 0, wxEXPAND | wxBOTTOM, FromDIP(2));
 
 	root_sizer->Add(box_sizer, 1, wxEXPAND);
@@ -704,6 +731,13 @@ wxString ZonePalettePanel::GetName() const {
 }
 
 void ZonePalettePanel::SelectFirstBrush() {
+	if (blacktek_mode_ && map_ && map_->blacktek_zones.isEnabled()) {
+		if (!map_->blacktek_zones.find(map_->selected_blacktek_zone) && !map_->blacktek_zones.records().empty()) {
+			map_->selected_blacktek_zone = map_->blacktek_zones.records().front().name;
+		}
+		if (g_brush_manager.zone_brush) g_brush_manager.zone_brush->setBlackTekMode();
+		return;
+	}
 	if (map_ && !map_->zones.empty()) {
 		for (const auto& z : map_->zones) {
 			if (z.id != 0) {
@@ -716,6 +750,10 @@ void ZonePalettePanel::SelectFirstBrush() {
 
 Brush* ZonePalettePanel::GetSelectedBrush() const {
 	if (g_brush_manager.zone_brush) {
+		if (blacktek_mode_) {
+			g_brush_manager.zone_brush->setBlackTekMode();
+			return g_brush_manager.zone_brush;
+		}
 		g_brush_manager.zone_brush->setZone(selected_zone_id_);
 		return g_brush_manager.zone_brush;
 	}
@@ -743,6 +781,7 @@ void ZonePalettePanel::SetMap(Map* map) {
 	if (map_ != map) {
 		selected_zone_id_ = 0;
 		selected_cluster_ = -1;
+		blacktek_mode_ = map && !map->supportsZones() && map->blacktek_zones.isEnabled();
 		if (g_brush_manager.zone_brush) {
 			g_brush_manager.zone_brush->setZone(0);
 		}
@@ -761,11 +800,68 @@ void ZonePalettePanel::CollapseAll() {
 }
 
 void ZonePalettePanel::OnUpdate() {
-	if (!map_ || !map_->supportsZones()) {
+	const bool supports_classic = map_ && map_->supportsZones();
+	const bool supports_blacktek = map_ && map_->blacktek_zones.isEnabled();
+	if (!supports_classic) blacktek_mode_ = supports_blacktek;
+	else if (!supports_blacktek) blacktek_mode_ = false;
+	else if (g_brush_manager.zone_brush && g_brush_manager.zone_brush->isBlackTekMode()
+		&& map_->blacktek_zones.find(map_->selected_blacktek_zone)) blacktek_mode_ = true;
+	if (g_brush_manager.zone_brush) {
+		if (blacktek_mode_) g_brush_manager.zone_brush->setBlackTekMode();
+		else g_brush_manager.zone_brush->setZone(selected_zone_id_);
+	}
+	if (mode_choice_) {
+		const bool show_mode = supports_classic && supports_blacktek;
+		mode_choice_->Show(show_mode);
+		mode_choice_->SetSelection(blacktek_mode_ ? 1 : 0);
+	}
+	if (toolbar_) toolbar_->Show(!blacktek_mode_);
+	if (!supports_classic && !supports_blacktek) {
+		if (canvas_) canvas_->SetZones({});
+		if (blacktek_list_) blacktek_list_->Clear();
+		if (add_button_) add_button_->Enable(false);
+		if (rename_button_) rename_button_->Enable(false);
+		if (remove_button_) remove_button_->Enable(false);
+		if (goto_button_) goto_button_->Enable(false);
+		Layout();
+		return;
+	}
+	if (blacktek_mode_ && supports_blacktek) {
+		if (canvas_) canvas_->Hide();
+		if (blacktek_list_) {
+			blacktek_list_->Show();
+			blacktek_list_->Clear();
+			int selection = wxNOT_FOUND;
+			for (size_t index = 0; index < map_->blacktek_zones.records().size(); ++index) {
+				const auto& zone = map_->blacktek_zones.records()[index];
+				blacktek_list_->Append(wxString::FromUTF8(zone.name));
+				if (zone.name == map_->selected_blacktek_zone) selection = static_cast<int>(index);
+			}
+			if (selection == wxNOT_FOUND && blacktek_list_->GetCount() > 0) selection = 0;
+			if (selection != wxNOT_FOUND) {
+				blacktek_list_->SetSelection(selection);
+				map_->selected_blacktek_zone = map_->blacktek_zones.records()[static_cast<size_t>(selection)].name;
+			}
+		}
+		Editor* editor = g_gui.GetCurrentEditor();
+		const bool can_edit = editor && editor->getMap() == map_ && !editor->live_manager.IsLive();
+		if (add_button_) { add_button_->SetLabel("Manage..."); add_button_->Enable(can_edit); }
+		if (rename_button_) rename_button_->Enable(false);
+		if (remove_button_) remove_button_->Enable(false);
+		if (goto_button_) goto_button_->Enable(map_->blacktek_zones.find(map_->selected_blacktek_zone) != nullptr);
+		Layout();
+		return;
+	}
+	if (canvas_) canvas_->Show();
+	if (blacktek_list_) blacktek_list_->Hide();
+	if (add_button_) add_button_->SetLabel("Add");
+	if (!supports_classic) {
 		if (canvas_) canvas_->SetZones({});
 		if (add_button_) add_button_->Enable(false);
 		if (rename_button_) rename_button_->Enable(false);
 		if (remove_button_) remove_button_->Enable(false);
+		if (goto_button_) goto_button_->Enable(false);
+		Layout();
 		return;
 	}
 
@@ -812,23 +908,63 @@ void ZonePalettePanel::OnUpdate() {
 	const bool has_selection = (selected_zone_id_ != 0 && map_->findZone(selected_zone_id_) != nullptr);
 	if (rename_button_) rename_button_->Enable(has_selection);
 	if (remove_button_) remove_button_->Enable(has_selection);
+	if (goto_button_) goto_button_->Enable(has_selection);
 }
 
 void ZonePalettePanel::SelectZoneById(uint16_t zone_id, int cluster) {
+	blacktek_mode_ = false;
 	selected_zone_id_ = zone_id;
 	selected_cluster_ = cluster;
 
 	if (g_brush_manager.zone_brush) {
 		g_brush_manager.zone_brush->setZone(zone_id);
 	}
+	if (mode_choice_) mode_choice_->SetSelection(0);
 	g_gui.SelectBrush();
 
 	const bool has_selection = (selected_zone_id_ != 0 && map_ && map_->findZone(selected_zone_id_) != nullptr);
 	if (rename_button_) rename_button_->Enable(has_selection);
 	if (remove_button_) remove_button_->Enable(has_selection);
+	if (goto_button_) goto_button_->Enable(has_selection);
+}
+
+void ZonePalettePanel::SelectBlackTekZone(std::string name) {
+	if (!map_ || !map_->blacktek_zones.isEnabled() || !map_->blacktek_zones.find(name)) return;
+	blacktek_mode_ = true;
+	map_->selected_blacktek_zone = std::move(name);
+	if (mode_choice_) mode_choice_->SetSelection(1);
+	if (g_brush_manager.zone_brush) {
+		g_brush_manager.zone_brush->setBlackTekMode();
+		g_gui.SelectBrush(g_brush_manager.zone_brush);
+	}
+	OnUpdate();
+	g_gui.RefreshView();
+}
+
+void ZonePalettePanel::OnZoneModeChanged(wxCommandEvent& event) {
+	blacktek_mode_ = event.GetSelection() == 1;
+	if (blacktek_mode_ && map_ && !map_->blacktek_zones.find(map_->selected_blacktek_zone)
+		&& !map_->blacktek_zones.records().empty()) {
+		map_->selected_blacktek_zone = map_->blacktek_zones.records().front().name;
+	}
+	if (g_brush_manager.zone_brush) {
+		if (blacktek_mode_) g_brush_manager.zone_brush->setBlackTekMode();
+		else g_brush_manager.zone_brush->setZone(selected_zone_id_);
+		g_gui.SelectBrush(g_brush_manager.zone_brush);
+	}
+	OnUpdate();
+	g_gui.RefreshView();
+}
+
+void ZonePalettePanel::OnManageBlackTekZones() {
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (editor && editor->getMap() == map_) {
+		BlackTekZonesWindow::ShowForEditor(this, *editor);
+	}
 }
 
 void ZonePalettePanel::OnClickAddZone() {
+	if (blacktek_mode_) { OnManageBlackTekZones(); return; }
 	if (!map_ || !map_->supportsZones()) return;
 
 	const std::string name = nstr(wxGetTextFromUser("Zone name:", "Add Zone", wxEmptyString, this).Trim().Trim(false));
@@ -845,6 +981,7 @@ void ZonePalettePanel::OnClickAddZone() {
 }
 
 void ZonePalettePanel::OnClickRenameZone() {
+	if (blacktek_mode_) { OnManageBlackTekZones(); return; }
 	if (!map_ || selected_zone_id_ == 0) return;
 	const Map::Zone* zone = map_->findZone(selected_zone_id_);
 	if (!zone) return;
@@ -861,6 +998,7 @@ void ZonePalettePanel::OnClickRenameZone() {
 }
 
 void ZonePalettePanel::OnClickRemoveZone() {
+	if (blacktek_mode_) { OnManageBlackTekZones(); return; }
 	if (!map_ || selected_zone_id_ == 0) return;
 	const Map::Zone* zone = map_->findZone(selected_zone_id_);
 	if (!zone) return;
@@ -891,6 +1029,29 @@ void ZonePalettePanel::OnClickRemoveZone() {
 }
 
 void ZonePalettePanel::OnGoToZone() {
+	if (blacktek_mode_ && map_) {
+		if (map_->selected_blacktek_zone.empty()) return;
+		const auto found = std::ranges::find(map_->blacktek_zones.geometry(), map_->selected_blacktek_zone, &BlackTekZoneGeometry::name);
+		if (found == map_->blacktek_zones.geometry().end()) return;
+		Position center;
+		if (found->range_start && found->range_end) {
+			center = Position((found->range_start->x + found->range_end->x) / 2,
+				(found->range_start->y + found->range_end->y) / 2,
+				(found->range_start->z + found->range_end->z) / 2);
+		} else if (!found->explicit_positions.empty()) {
+			int min_x = found->explicit_positions.front().x, max_x = min_x;
+			int min_y = found->explicit_positions.front().y, max_y = min_y;
+			int min_z = found->explicit_positions.front().z, max_z = min_z;
+			for (const Position& pos : found->explicit_positions) {
+				min_x = std::min(min_x, pos.x); max_x = std::max(max_x, pos.x);
+				min_y = std::min(min_y, pos.y); max_y = std::max(max_y, pos.y);
+				min_z = std::min(min_z, pos.z); max_z = std::max(max_z, pos.z);
+			}
+			center = Position((min_x + max_x) / 2, (min_y + max_y) / 2, (min_z + max_z) / 2);
+		}
+		if (center.isValid()) g_gui.SetScreenCenterPosition(center);
+		return;
+	}
 	if (!map_ || selected_zone_id_ == 0) return;
 	const auto clusters = map_->getZoneClusters(selected_zone_id_);
 	if (clusters.empty()) return;

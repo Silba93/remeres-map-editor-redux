@@ -24,6 +24,7 @@
 #include "map/map.h"
 #include "brushes/brush.h"
 #include "editor/action.h"
+#include "editor/operations/blacktek_zone_operations.h"
 #include "map/tile.h"
 #include "editor/selection.h"
 #include "game/items.h"
@@ -98,6 +99,7 @@ namespace LuaAPI {
 		std::unique_ptr<BatchAction> batch;
 		std::unique_ptr<Action> action;
 		std::unordered_map<uint64_t, std::unique_ptr<Tile>> originalTiles;
+		std::optional<BlackTekZoneDocument> originalBlackTekZones;
 
 		uint64_t positionKey(const Position& pos) const {
 			return (static_cast<uint64_t>(pos.x) << 32) | (static_cast<uint64_t>(pos.y) << 16) | static_cast<uint64_t>(pos.z);
@@ -142,6 +144,13 @@ namespace LuaAPI {
 		void commit() {
 			if (!active) {
 				return;
+			}
+			if (originalBlackTekZones) {
+				auto modified = std::make_unique<BlackTekZoneDocument>(std::move(editor->map.blacktek_zones));
+				originalBlackTekZones->inheritSaveBaselineFrom(*modified);
+				editor->map.blacktek_zones = std::move(*originalBlackTekZones);
+				originalBlackTekZones.reset();
+				action->addChange(std::make_unique<Change>(std::move(modified)));
 			}
 
 			// Process each modified tile
@@ -192,6 +201,12 @@ namespace LuaAPI {
 			if (!active) {
 				return;
 			}
+			if (originalBlackTekZones) {
+				originalBlackTekZones->inheritSaveBaselineFrom(editor->map.blacktek_zones);
+				editor->map.blacktek_zones = std::move(*originalBlackTekZones);
+				originalBlackTekZones.reset();
+				g_gui.RefreshView();
+			}
 
 			// Restore original tiles (discard any changes made)
 			for (auto& pair : originalTiles) {
@@ -239,12 +254,17 @@ namespace LuaAPI {
 		bool isActive() const {
 			return active;
 		}
+		void setBlackTekZones(BlackTekZoneDocument document) {
+			if (!originalBlackTekZones) originalBlackTekZones = editor->map.blacktek_zones;
+			editor->map.blacktek_zones = std::move(document);
+		}
 		Editor* getEditor() const {
 			return editor;
 		}
 
 	private:
 		void cleanup() {
+			originalBlackTekZones.reset();
 			active = false;
 			editor = nullptr;
 			batch.reset();
@@ -256,6 +276,25 @@ namespace LuaAPI {
 	void markTileForUndo(Tile* tile, bool originallyExisted) {
 		if (LuaTransaction::getInstance().isActive()) {
 			LuaTransaction::getInstance().markTileModified(tile, originallyExisted);
+		}
+	}
+
+	void applyBlackTekZones(Map* map, BlackTekZoneDocument document) {
+		Editor* editor = g_gui.GetCurrentEditor();
+		if (!map || !editor || editor->getMap() != map) {
+			throw sol::error("BlackTek edits require this map to be the active editor");
+		}
+		if (editor->live_manager.IsLive()) {
+			throw sol::error("BlackTek zone editing is unavailable during live collaboration");
+		}
+		if (!document.canSave()) throw sol::error("BlackTek zone document contains unresolved load errors");
+		auto& transaction = LuaTransaction::getInstance();
+		if (transaction.isActive()) {
+			if (transaction.getEditor() != editor) throw sol::error("Script transaction belongs to another map");
+			transaction.setBlackTekZones(std::move(document));
+		} else {
+			std::string error;
+			if (!BlackTekZoneOperations::apply(*editor, std::move(document), error)) throw sol::error(error);
 		}
 	}
 

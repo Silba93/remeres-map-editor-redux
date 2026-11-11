@@ -11,7 +11,7 @@ This test suite provides comprehensive coverage of **every Lua API call** availa
 | File | API Module | Tests Count | Description |
 |------|-----------|-------------|-------------|
 | `test_app.lua` | app namespace | 12 | Version info, transactions, events, overlays, clipboard, keyboard state |
-| `test_map.lua` | Map | 3 | Map properties, tile retrieval, iterators |
+| `test_map.lua` | Map | 4 | Map properties, tile retrieval, iterators, BlackTek transaction rollback |
 | `test_tile_item.lua` | Tile & Item | 5 | Tile operations, item management, creature/spawn handling |
 | `test_position.lua` | Position | 13 | Constructors, operators (+, -, ==), isValid(), tostring |
 | `test_selection.lua` | Selection | 12 | Selection management, add/remove, bounds, tiles collection |

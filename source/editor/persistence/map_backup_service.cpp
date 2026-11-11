@@ -8,6 +8,7 @@
 #include "io/iomap_otbm.h"
 #include "util/file_system.h"
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <spdlog/spdlog.h>
 
@@ -62,10 +63,44 @@ bool MapBackupService::CreateSnapshot(
 	const std::string original_housefile = editor.map.getHouseFilename();
 	const std::string original_zonefile = editor.map.getZoneFilename();
 	const std::string original_waypointfile = editor.map.getWaypointFilename();
+	const BlackTekZoneDocument original_blacktek_zones = editor.map.blacktek_zones;
 	const bool original_changed = editor.map.hasChanged();
 	const bool original_unnamed = editor.map.isUnnamed();
 
 	const std::string snapshot_base = nstr(target_file.GetName());
+	const std::filesystem::path snapshot_directory = std::filesystem::path(nstr(target_file.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME)));
+	const std::filesystem::path snapshot_blacktek_zones = snapshot_directory / (snapshot_base + "-zones");
+	bool owns_snapshot_blacktek_zones = false;
+	if (editor.map.blacktek_zones.isEnabled()) {
+		std::error_code ec;
+		if (std::filesystem::exists(snapshot_blacktek_zones, ec) || ec) {
+			out_error = "Refusing to overwrite existing BlackTek zone snapshot folder: " + snapshot_blacktek_zones.string();
+			return false;
+		}
+		if (editor.map.hasFile()) {
+			const std::filesystem::path source_map(editor.map.getFilename());
+			const std::filesystem::path source_blacktek_zones = source_map.parent_path() / (source_map.stem().string() + "-zones");
+			const auto source_status = std::filesystem::symlink_status(source_blacktek_zones, ec);
+			if (ec && ec != std::errc::no_such_file_or_directory) {
+				out_error = "Cannot inspect BlackTek zone source folder: " + ec.message();
+				return false;
+			}
+			if (std::filesystem::is_symlink(source_status)) {
+				out_error = "Refusing to snapshot a symbolic link as BlackTek zone data: " + source_blacktek_zones.string();
+				return false;
+			}
+			if (std::filesystem::is_directory(source_status)) {
+				std::filesystem::copy(source_blacktek_zones, snapshot_blacktek_zones, std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks, ec);
+				if (ec) {
+					std::error_code cleanup_error;
+					std::filesystem::remove_all(snapshot_blacktek_zones, cleanup_error);
+					out_error = "Failed to copy BlackTek zone data into the snapshot: " + ec.message();
+					return false;
+				}
+				owns_snapshot_blacktek_zones = true;
+			}
+		}
+	}
 	editor.map.setSpawnFilename(snapshot_base + "-spawn.xml");
 	editor.map.setMonsterFilename(snapshot_base + "-monster.xml");
 	editor.map.setNpcFilename(snapshot_base + "-npc.xml");
@@ -83,6 +118,7 @@ bool MapBackupService::CreateSnapshot(
 	editor.map.setHouseFilename(original_housefile);
 	editor.map.setZoneFilename(original_zonefile);
 	editor.map.setWaypointFilename(original_waypointfile);
+	editor.map.blacktek_zones = original_blacktek_zones;
 	editor.map.setUnnamed(original_unnamed);
 	if (!original_changed && editor.map.hasChanged()) {
 		editor.map.clearChanges();
@@ -97,6 +133,10 @@ bool MapBackupService::CreateSnapshot(
 		std::remove((dir + snapshot_base + "-house.xml").c_str());
 		std::remove((dir + snapshot_base + "-zones.xml").c_str());
 		std::remove((dir + snapshot_base + "-waypoint.xml").c_str());
+		if (owns_snapshot_blacktek_zones) {
+			std::error_code ec;
+			std::filesystem::remove_all(snapshot_blacktek_zones, ec);
+		}
 
 		out_error = "Failed to save backup map snapshot to: " + out_backup_path;
 		spdlog::error("MapBackupService::CreateSnapshot: {}", out_error);

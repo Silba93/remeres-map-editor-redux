@@ -188,7 +188,7 @@ void PaletteWindow::updateZonePage(Map* map) {
 		return;
 	}
 
-	const bool supports_zones = map && map->supportsZones();
+	const bool supports_zones = map && (map->supportsZones() || map->blacktek_zones.isEnabled());
 	int zone_page_idx = wxNOT_FOUND;
 	for (size_t i = 0; i < choicebook->GetPageCount(); ++i) {
 		if (choicebook->GetPage(i) == zone_palette) {

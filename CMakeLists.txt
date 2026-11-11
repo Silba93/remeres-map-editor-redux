@@ -247,3 +247,14 @@ target_link_libraries(test_universal_rotator PRIVATE ${LUA_LIBRARIES})
 
 enable_testing()
 add_test(NAME test_universal_rotator COMMAND test_universal_rotator)
+
+# --- BlackTek zone model round-trip and save safety tests ---
+add_executable(test_blacktek_zones
+	${CMAKE_CURRENT_SOURCE_DIR}/source/game/blacktek_zones.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/tests/test_blacktek_zones.cpp
+)
+target_compile_features(test_blacktek_zones PRIVATE cxx_std_23)
+target_include_directories(test_blacktek_zones PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
+target_link_libraries(test_blacktek_zones PRIVATE tomlplusplus::tomlplusplus)
+add_test(NAME test_blacktek_zones COMMAND test_blacktek_zones)
+set_tests_properties(test_blacktek_zones PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

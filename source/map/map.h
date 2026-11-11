@@ -25,6 +25,7 @@
 #include "game/town.h"
 #include "game/house.h"
 #include "game/spawn.h"
+#include "game/blacktek_zones.h"
 #include "game/complexitem.h"
 #include "game/waypoints.h"
 #include "map/zone_index.h"
@@ -219,6 +220,9 @@ protected:
 
 public:
 	std::vector<Zone> zones;
+	BlackTekZoneDocument blacktek_zones;
+	// Selection belongs to this map, not to the shared zone brush.
+	std::string selected_blacktek_zone;
 	ZoneIndex zone_index;
 	uint16_t max_assigned_zone_id = 0;
 

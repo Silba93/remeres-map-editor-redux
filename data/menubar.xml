@@ -112,6 +112,7 @@
 		<item name="Cleanup invalid zones..." action="MAP_CLEAN_INVALID_ZONES" help="Removes preserved invalid tile flags and opaque OTBM tile fragments from the map."/>
 		<item name="Remove unreachable tiles..." action="MAP_REMOVE_UNREACHABLE_TILES" help="Removes unreachable and invisible tiles from the map."/>
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
+		<item name="BlackTek Zones and Spawns..." action="MAP_BLACKTEK_ZONES" help="Edit BlackTek TOML zones, world flags and spawn behavior."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 		<item name="Validate Spawns..." action="MAP_VALIDATE_SPAWNS" help="Validate spawns for invalid times, unknown creatures, and wall/unwalkable collisions."/>
 	</menu>

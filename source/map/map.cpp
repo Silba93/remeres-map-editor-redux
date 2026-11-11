@@ -71,6 +71,8 @@ void Map::initializeEmpty() {
 	description = "No map description available.";
 	unnamed = true;
 	zones.clear();
+	blacktek_zones = BlackTekZoneDocument {};
+	selected_blacktek_zone.clear();
 	zone_index.clear();
 	max_assigned_zone_id = 0;
 

@@ -278,6 +278,10 @@ bool IOMapOTBM::loadMapFromDisk(Map& map, const FileName& filename) {
 	}
 	loadAux(MapXMLIO::loadHouses, "house", "houses", map.housefile);
 	loadAux(MapXMLIO::loadZones, "zones", "zones", map.zonefile);
+	const std::filesystem::path blacktek_zone_directory = toPath(filename).parent_path() / (nstr(filename.GetName()) + "-zones");
+	if (!map.blacktek_zones.load(blacktek_zone_directory)) {
+		spdlog::warn("IOMapOTBM: Failed to load BlackTek zones from {}", blacktek_zone_directory.string());
+	}
 
 	// If the map has zone assignments on tiles but no corresponding zone metadata was loaded
 	// (e.g. missing, corrupt, or unreferenced sidecar XML), synthesize placeholder definitions
@@ -666,7 +670,7 @@ bool IOMapOTBM::loadMap(Map& map, const FileName& filename) {
 	return loadMapFromDisk(map, filename);
 }
 
-bool IOMapOTBM::saveMapToDisk(Map& map, const FileName& identifier) {
+bool IOMapOTBM::saveMapToDisk(Map& map, const FileName& identifier, bool retain_blacktek_recovery) {
 	const std::string magic = g_settings.getInteger(Config::SAVE_WITH_OTB_MAGIC_NUMBER) ? "OTBM" : std::string(4, '\0');
 
 	// Zones created in the editor on a map that had none still need a file for the header to reference
@@ -801,17 +805,47 @@ bool IOMapOTBM::saveMapToDisk(Map& map, const FileName& identifier) {
 		}
 	}
 
+	std::optional<BlackTekZoneSaveTransaction> blacktek_zone_transaction;
+	std::filesystem::path blacktek_zone_directory;
+	if (map.blacktek_zones.isEnabled()) {
+		blacktek_zone_directory = toPath(identifier).parent_path() / (nstr(identifier.GetName()) + "-zones");
+		std::string error;
+		blacktek_zone_transaction = map.blacktek_zones.stageSave(blacktek_zone_directory, error, retain_blacktek_recovery);
+		if (!blacktek_zone_transaction) {
+			spdlog::error("IOMapOTBM: Failed to stage BlackTek zones: {}", error);
+			return false;
+		}
+		if (!blacktek_zone_transaction->commit(error)) {
+			spdlog::error("IOMapOTBM: Failed to commit BlackTek zones: {}", error);
+			return false;
+		}
+	}
+
 	// An Abort clicked while the last files were written must still discard the
 	// save instead of accepting it and marking the map as clean.
 	if (shouldAbortSave()) {
+		if (blacktek_zone_transaction) {
+			std::string error;
+			if (!blacktek_zone_transaction->rollback(error)) {
+				spdlog::error("IOMapOTBM: Failed to roll back BlackTek zones after cancellation: {}", error);
+			}
+		}
 		return false;
+	}
+	if (blacktek_zone_transaction) {
+		blacktek_zone_transaction->finalize(retain_blacktek_recovery);
+		map.blacktek_zones.markSaved(blacktek_zone_directory);
 	}
 
 	return true;
 }
 
 bool IOMapOTBM::saveMap(Map& map, const FileName& identifier) {
-	return saveMapToDisk(map, identifier);
+	return saveMapToDisk(map, identifier, false);
+}
+
+bool IOMapOTBM::saveMapWithRecovery(Map& map, const FileName& identifier) {
+	return saveMapToDisk(map, identifier, true);
 }
 
 bool IOMapOTBM::saveMap(Map& map, NodeFileWriteHandle& f) {

@@ -18,12 +18,14 @@
 #include "app/main.h"
 #include "lua_api_map.h"
 #include "lua_api.h"
+#include "lua_api_app.h"
 #include "map/map.h"
 #include "map/basemap.h"
 #include "map/tile.h"
 #include "map/position.h"
 #include "ui/gui.h"
 #include "editor/editor.h"
+#include "editor/operations/blacktek_zone_operations.h"
 
 namespace LuaAPI {
 
@@ -136,6 +138,59 @@ namespace LuaAPI {
 			"spawnFilename", sol::property(&Map::getSpawnFilename),
 			"monsterFilename", sol::property(&Map::getMonsterFilename),
 			"npcFilename", sol::property(&Map::getNpcFilename),
+			"blacktekZonesEnabled", sol::property([](Map* map) { return map && map->blacktek_zones.isEnabled(); }),
+			"blacktekZoneNames", [](Map* map, sol::this_state ts) {
+				sol::state_view state(ts);
+				sol::table names = state.create_table();
+				if (map) {
+					int index = 1;
+					for (const auto& zone : map->blacktek_zones.records()) names[index++] = zone.name;
+				}
+				return names;
+			},
+			"getBlacktekZone", [](Map* map, const std::string& name) -> sol::optional<std::string> {
+				const auto* zone = map ? map->blacktek_zones.find(name) : nullptr;
+				if (!zone) return sol::nullopt;
+				return BlackTekZoneDocument::formatProperties(zone->properties);
+			},
+			"setBlacktekZone", [](Map* map, const std::string& name, const std::string& text) {
+				if (!map) throw sol::error("No map available");
+				toml::table properties;
+				std::string error;
+				if (!BlackTekZoneDocument::parseProperties(text, properties, error)) throw sol::error(error);
+				auto document = map->blacktek_zones;
+				const bool updated = document.find(name)
+					? document.replace(name, std::move(properties), error)
+					: document.add(name, std::move(properties), error);
+				if (!updated) throw sol::error(error);
+				document.setEnabled(true);
+				applyBlackTekZones(map, std::move(document));
+			},
+			"removeBlacktekZone", [](Map* map, const std::string& name) {
+				if (!map) throw sol::error("No map available");
+				auto document = map->blacktek_zones;
+				if (!document.remove(name)) return false;
+				applyBlackTekZones(map, std::move(document));
+				return true;
+			},
+			"moveBlacktekZone", [](Map* map, const std::string& name, const Position& offset) {
+				if (!map) throw sol::error("No map available");
+				toml::table properties;
+				std::string error;
+				if (!BlackTekZoneOperations::translatedProperties(map->blacktek_zones, name, offset, properties, error)) throw sol::error(error);
+				auto document = map->blacktek_zones;
+				if (!document.replace(name, std::move(properties), error)) throw sol::error(error);
+				applyBlackTekZones(map, std::move(document));
+			},
+			"duplicateBlacktekZone", [](Map* map, const std::string& name, const std::string& new_name, const Position& offset) {
+				if (!map) throw sol::error("No map available");
+				toml::table properties;
+				std::string error;
+				if (!BlackTekZoneOperations::translatedProperties(map->blacktek_zones, name, offset, properties, error)) throw sol::error(error);
+				auto document = map->blacktek_zones;
+				if (!document.add(new_name, std::move(properties), error)) throw sol::error(error);
+				applyBlackTekZones(map, std::move(document));
+			},
 			"hasFile", sol::property(&Map::hasFile),
 			"hasChanged", sol::property(&Map::hasChanged),
 			"tileCount", sol::property([](Map* map) -> uint64_t {

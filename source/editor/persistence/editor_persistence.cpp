@@ -72,6 +72,62 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 	const std::string prev_house = editor.map.getHouseFilename();
 	const std::string prev_zone = editor.map.getZoneFilename();
 	const std::string prev_waypoint = editor.map.getWaypointFilename();
+	std::string backup_blacktek_zones;
+	std::filesystem::path blacktek_zone_directory;
+	std::filesystem::path blacktek_recovery_path;
+	std::filesystem::path permanent_blacktek_backup_target;
+	bool blacktek_zone_directory_existed = false;
+	const bool preserve_blacktek_backup = !save_as && g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP) && editor.map.blacktek_zones.isEnabled();
+	if (editor.map.blacktek_zones.isEnabled()) {
+		FileName map_identifier(wxstr(savefile));
+		blacktek_zone_directory = std::filesystem::path(nstr(map_identifier.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME))) / (nstr(map_identifier.GetName()) + "-zones");
+		std::error_code ec;
+		const auto status = std::filesystem::symlink_status(blacktek_zone_directory, ec);
+		if (ec == std::errc::no_such_file_or_directory) {
+			ec.clear();
+		} else if (ec) {
+			spdlog::error("EditorPersistence: Cannot inspect BlackTek zone directory '{}': {}", blacktek_zone_directory.string(), ec.message());
+			return false;
+		}
+		if (std::filesystem::is_symlink(status) || (std::filesystem::exists(status) && !std::filesystem::is_directory(status))) {
+			spdlog::error("EditorPersistence: BlackTek zone path must be a real directory: {}", blacktek_zone_directory.string());
+			return false;
+		}
+		blacktek_zone_directory_existed = std::filesystem::exists(status);
+		blacktek_recovery_path = std::filesystem::path(blacktek_zone_directory.string() + "~");
+		ec.clear();
+		const auto recovery_status = std::filesystem::symlink_status(blacktek_recovery_path, ec);
+		if (ec == std::errc::no_such_file_or_directory) {
+			ec.clear();
+		} else if (ec) {
+			spdlog::error("EditorPersistence: Cannot inspect BlackTek recovery path '{}': {}", blacktek_recovery_path.string(), ec.message());
+			return false;
+		}
+		if (std::filesystem::exists(recovery_status)) {
+			spdlog::error("EditorPersistence: A BlackTek zone recovery directory already exists: {}", blacktek_recovery_path.string());
+			return false;
+		}
+		backup_blacktek_zones = blacktek_recovery_path.string();
+		if (preserve_blacktek_backup && blacktek_zone_directory_existed) {
+			const std::string timestamp = MapBackupService::GenerateTimestampString(false);
+			permanent_blacktek_backup_target = blacktek_zone_directory.string() + "." + timestamp + ".zones";
+			for (unsigned int suffix = 0;; ++suffix) {
+				const auto backup_status = std::filesystem::symlink_status(permanent_blacktek_backup_target, ec);
+				if (ec == std::errc::no_such_file_or_directory) {
+					ec.clear();
+					break;
+				}
+				if (ec) {
+					spdlog::error("EditorPersistence: Cannot inspect BlackTek backup destination: {}", ec.message());
+					return false;
+				}
+				if (!std::filesystem::exists(backup_status)) {
+					break;
+				}
+				permanent_blacktek_backup_target = blacktek_zone_directory.string() + "." + timestamp + "-" + std::to_string(suffix + 1) + ".zones";
+			}
+		}
+	}
 
 	// If not named yet, propagate the file name to the auxilliary files
 	if (editor.map.unnamed) {
@@ -162,7 +218,7 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 	}
 
 	// Save the map
-	MapBackupService::WriteCrashMarker({backup_otbm, backup_house, backup_spawn, backup_monster, backup_npc, backup_zone, backup_waypoint});
+	MapBackupService::WriteCrashMarker({backup_otbm, backup_house, backup_spawn, backup_monster, backup_npc, backup_zone, backup_waypoint, backup_blacktek_zones});
 
 	{
 
@@ -177,7 +233,7 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 
 		// Perform the actual save
 		IOMapOTBM mapsaver(editor.map.getVersion());
-		bool success = mapsaver.saveMap(editor.map, fn);
+		bool success = mapsaver.saveMapWithRecovery(editor.map, fn);
 		const bool cancelled = showdialog && g_gui.WasLoadCancelled();
 		bool keep_recovery_info = false;
 
@@ -238,6 +294,20 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 			if (!editor.map.getWaypointFilename().empty()) {
 				restoreBackup(backup_waypoint, map_path + editor.map.getWaypointFilename());
 			}
+			if (!backup_blacktek_zones.empty()) {
+				std::error_code ec;
+				if (std::filesystem::exists(backup_blacktek_zones, ec) && !ec) {
+					const std::filesystem::path target_path(backup_blacktek_zones.substr(0, backup_blacktek_zones.size() - 1));
+					std::filesystem::remove_all(target_path, ec);
+					if (!ec) {
+						std::filesystem::rename(backup_blacktek_zones, target_path, ec);
+					}
+				}
+				if (ec) {
+					spdlog::error("EditorPersistence: Failed to restore BlackTek zone folder '{}': {}", backup_blacktek_zones, ec.message());
+					failed_restores.push_back(backup_blacktek_zones);
+				}
+			}
 
 			if (!failed_restores.empty()) {
 				// Keep the crash marker so the next start offers to recover the
@@ -262,10 +332,6 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 		// Remove the temporary save runfile, unless the rollback could not
 		// restore everything: then it has to survive so the next start can
 		// offer to recover the previous files.
-		if (!keep_recovery_info) {
-			MapBackupService::ClearCrashMarker();
-		}
-
 		// If failure, don't run the rest of the function
 		if (!success) {
 			editor.map.filename = prev_filename;
@@ -277,9 +343,13 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 			editor.map.setHouseFilename(prev_house);
 			editor.map.setZoneFilename(prev_zone);
 			editor.map.setWaypointFilename(prev_waypoint);
+			if (!keep_recovery_info) {
+				MapBackupService::ClearCrashMarker();
+			}
 			return false;
 		}
 	}
+	MapBackupService::ClearCrashMarker();
 
 	// Move to permanent backup
 	if (!save_as && g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP)) {
@@ -327,6 +397,16 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 			std::string waypoint_filename = map_path + nstr(converter.GetName());
 			std::rename(backup_waypoint.c_str(), std::string(waypoint_filename + "." + date_str + ".xml").c_str());
 		}
+		if (preserve_blacktek_backup && blacktek_zone_directory_existed && !backup_blacktek_zones.empty()) {
+			std::error_code ec;
+			std::filesystem::rename(blacktek_recovery_path, permanent_blacktek_backup_target, ec);
+			if (ec) {
+				spdlog::error("EditorPersistence: Preserving previous BlackTek zones at '{}' after archive move failed: {}", blacktek_recovery_path.string(), ec.message());
+				g_gui.SetStatusText(wxstr(std::format("Previous BlackTek zones remain recoverable at {}", blacktek_recovery_path.string())));
+			} else {
+				backup_blacktek_zones.clear();
+			}
+		}
 	} else {
 		// Delete the temporary files
 		std::remove(backup_otbm.c_str());
@@ -336,6 +416,14 @@ bool EditorPersistence::saveMap(Editor& editor, FileName filename, bool showdial
 		std::remove(backup_npc.c_str());
 		std::remove(backup_zone.c_str());
 		std::remove(backup_waypoint.c_str());
+	}
+	if (!backup_blacktek_zones.empty() && !(preserve_blacktek_backup && blacktek_zone_directory_existed)) {
+		std::error_code ec;
+		std::filesystem::remove_all(blacktek_recovery_path, ec);
+		if (ec) {
+			spdlog::warn("EditorPersistence: Saved the map but could not remove temporary BlackTek recovery directory '{}': {}", backup_blacktek_zones, ec.message());
+			g_gui.SetStatusText(wxstr(std::format("Previous BlackTek zones remain at {}", backup_blacktek_zones)));
+		}
 	}
 
 	editor.map.clearChanges();

@@ -23,12 +23,14 @@
 #include "app/settings.h"
 #include "map/map.h"
 #include "map/tile.h"
+#include "game/blacktek_zones.h"
 #include "game/town.h"
 #include "editor/editor.h"
 #include "ui/gui.h"
 
 #include <ranges>
 #include <ctime>
+#include <limits>
 
 namespace {
 
@@ -55,7 +57,6 @@ void updateUndoTile(Tile* tile, ActionIdentifier type) {
 
 Change::Change() :
 	type(CHANGE_NONE), data(std::monostate {}) {
-	////
 }
 
 Change::Change(std::unique_ptr<Tile> t) :
@@ -68,6 +69,45 @@ Change::Change(std::unique_ptr<Tile> t, const Position& pos) :
 	type(CHANGE_TILE),
 	position(pos),
 	data(std::move(t)) {
+}
+
+Change::Change(std::unique_ptr<BlackTekZoneDocument> document) :
+	type(CHANGE_BLACKTEK_ZONES),
+	data(std::move(document)) {
+}
+
+Change::Change(BlackTekZoneRecord record) :
+	type(CHANGE_BLACKTEK_ZONES) {
+	BlackTekZoneChangeData zone_change;
+	zone_change.name = record.name;
+	zone_change.record = std::make_unique<BlackTekZoneRecord>(std::move(record));
+	zone_change.exists = true;
+	data = std::move(zone_change);
+}
+
+void Change::swapBlackTekZones(Map& map) {
+	if (auto* change = std::get_if<BlackTekZoneChangeData>(&data)) {
+		const BlackTekZoneRecord* current = map.blacktek_zones.find(change->name);
+		const bool current_exists = current != nullptr;
+		auto previous = current ? std::make_unique<BlackTekZoneRecord>(*current) : nullptr;
+		std::string error;
+		if (change->exists && change->record) {
+			if (current) {
+				map.blacktek_zones.replace(change->name, change->record->properties, error);
+			} else {
+				map.blacktek_zones.add(*change->record, error);
+			}
+		} else {
+			map.blacktek_zones.remove(change->name);
+		}
+		change->record = std::move(previous);
+		change->exists = current_exists;
+		map.blacktek_zones.markDirty();
+	} else if (auto* document = std::get_if<std::unique_ptr<BlackTekZoneDocument>>(&data); document && *document) {
+		std::swap(map.blacktek_zones, **document);
+		map.blacktek_zones.inheritSaveBaselineFrom(**document);
+		map.blacktek_zones.markDirty();
+	}
 }
 
 Change* Change::Create(House* house, const Position& where) {
@@ -123,7 +163,7 @@ const TownTempleChangeData* Change::getTownTempleData() const {
 }
 
 uint32_t Change::memsize() const {
-	uint32_t mem = sizeof(*this);
+	size_t mem = sizeof(*this);
 	if (auto* t = std::get_if<std::unique_ptr<Tile>>(&data)) {
 		if (*t) {
 			mem += (*t)->memsize();
@@ -134,8 +174,15 @@ uint32_t Change::memsize() const {
 		mem += sizeof(HouseExitChangeData);
 	} else if (auto* temple = std::get_if<TownTempleChangeData>(&data)) {
 		mem += sizeof(TownTempleChangeData);
+	} else if (const auto* document = std::get_if<std::unique_ptr<BlackTekZoneDocument>>(&data); document && *document) {
+		mem += (*document)->estimatedMemorySize();
+	} else if (const auto* zone_change = std::get_if<BlackTekZoneChangeData>(&data)) {
+		mem += zone_change->name.capacity();
+		if (zone_change->record) {
+			mem += BlackTekZoneDocument::recordMemorySize(*zone_change->record);
+		}
 	}
-	return mem;
+	return static_cast<uint32_t>(std::min(mem, static_cast<size_t>(std::numeric_limits<uint32_t>::max())));
 }
 
 Action::Action(Editor& editor, ActionIdentifier ident) :
@@ -149,13 +196,16 @@ Action::~Action() {
 }
 
 size_t Action::approx_memsize() const {
-	uint32_t mem = sizeof(*this);
-	mem += changes.size() * (sizeof(Change) + sizeof(Tile) + sizeof(Item) + 6 /* approx overhead*/);
+	size_t mem = sizeof(*this);
+	for (const auto& change : changes) {
+		mem += change->getType() == CHANGE_BLACKTEK_ZONES ? change->memsize()
+			: (sizeof(Change) + sizeof(Tile) + sizeof(Item) + 6 /* approx overhead */);
+	}
 	return mem;
 }
 
 size_t Action::memsize() const {
-	uint32_t mem = sizeof(*this);
+	size_t mem = sizeof(*this);
 	mem += sizeof(Change*) * 3 * changes.size();
 	for (const auto& c : changes) {
 		mem += c->memsize();
@@ -381,6 +431,10 @@ void Action::commit(DirtyList* dirty_list) {
 				}
 				break;
 			}
+
+			case CHANGE_BLACKTEK_ZONES:
+				c->swapBlackTekZones(editor.map);
+				break;
 
 			default:
 				break;
@@ -632,6 +686,10 @@ void Action::undo(DirtyList* dirty_list) {
 				}
 				break;
 			}
+
+			case CHANGE_BLACKTEK_ZONES:
+				c->swapBlackTekZones(editor.map);
+				break;
 
 			default:
 				break;

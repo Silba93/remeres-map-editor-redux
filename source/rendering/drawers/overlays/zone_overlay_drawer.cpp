@@ -11,6 +11,7 @@
 #include "map/map.h"
 #include "map/basemap.h"
 #include "map/tile.h"
+#include "game/blacktek_zones.h"
 #include "game/item.h"
 #include "game/spawn.h"
 #include "game/waypoints.h"
@@ -599,7 +600,106 @@ void ZoneOverlayDrawer::drawFloorZones(SpriteBatch& sprite_batch,
                                        const BaseMap* secondary_map,
                                        const DrawingOptions& options,
                                        const AtlasManager& atlas) {
-	if (!map.supportsZones() || options.ingame || !options.show_zones || view.zoom > kZoomLODCutoff) {
+	if (options.ingame || !options.show_zones || view.zoom > kZoomLODCutoff) {
+		return;
+	}
+
+	// BlackTek zones are external definitions and can be used with map formats
+	// that do not carry OTBM 5 zone IDs. Draw their stored geometry directly,
+	// clipping ranges to the current viewport so large map-wide zones stay cheap.
+	if (map.blacktek_zones.isEnabled()) {
+		const auto geometry = map.blacktek_zones.geometry();
+		const ViewBounds bounds = view.getBoundsForFloor(z);
+		const int min_x = std::max(bounds.start_x, 0);
+		const int max_x = bounds.end_x;
+		const int min_y = std::max(bounds.start_y, 0);
+		const int max_y = bounds.end_y;
+		const AtlasRegion* white_pixel = atlas.getWhitePixel();
+		if (white_pixel && min_x <= max_x && min_y <= max_y) {
+			const int offset = (z <= GROUND_LAYER)
+				? (GROUND_LAYER - z) * TILE_SIZE
+				: TILE_SIZE * (view.floor - z);
+			const int base_screen_x = -view.view_scroll_x - offset;
+			const int base_screen_y = -view.view_scroll_y - offset;
+			constexpr float tile_size = static_cast<float>(TILE_SIZE);
+			sprite_batch.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, atlas);
+
+			size_t zone_index = 0;
+			for (const BlackTekZoneGeometry& zone : geometry) {
+				const glm::vec3 color = getZoneColor(static_cast<uint16_t>((zone_index++ % 1023) + 1));
+				if (zone.range_start && zone.range_end) {
+					const int range_min_x = std::min(zone.range_start->x, zone.range_end->x);
+					const int range_max_x = std::max(zone.range_start->x, zone.range_end->x);
+					const int range_min_y = std::min(zone.range_start->y, zone.range_end->y);
+					const int range_max_y = std::max(zone.range_start->y, zone.range_end->y);
+					const int range_min_z = std::min(zone.range_start->z, zone.range_end->z);
+					const int range_max_z = std::max(zone.range_start->z, zone.range_end->z);
+					if (z >= range_min_z && z <= range_max_z) {
+						const int draw_min_x = std::max(min_x, range_min_x);
+						const int draw_max_x = std::min(max_x, range_max_x);
+						const int draw_min_y = std::max(min_y, range_min_y);
+						const int draw_max_y = std::min(max_y, range_max_y);
+						// Explicit positions define world-flag coverage when both forms exist;
+						// the range remains the spawn bounds and is shown by its outline.
+						for (int y = draw_min_y; zone.explicit_positions.empty() && y <= draw_max_y; ++y) {
+							const float fy = static_cast<float>(y * TILE_SIZE + base_screen_y);
+							for (int x = draw_min_x; x <= draw_max_x; ++x) {
+								const float fx = static_cast<float>(x * TILE_SIZE + base_screen_x);
+								const float depth = calculateTileDepth(x, y, RenderSublayer::GroundOverlay);
+								sprite_batch.draw(fx, fy, tile_size, tile_size, *white_pixel, color.r, color.g, color.b, 0.10f, 0.0f, 0u, depth);
+							}
+						}
+
+						// Draw only true range edges that fall inside the view; viewport
+						// clipping must not make an artificial boundary look like authored data.
+						constexpr float edge_width = 2.0f;
+						const int visible_min_x = std::max(range_min_x, min_x);
+						const int visible_max_x = std::min(range_max_x, max_x);
+						const int visible_min_y = std::max(range_min_y, min_y);
+						const int visible_max_y = std::min(range_max_y, max_y);
+						if (visible_min_x <= visible_max_x && visible_min_y <= visible_max_y) {
+							const float left = static_cast<float>(range_min_x * TILE_SIZE + base_screen_x);
+							const float top = static_cast<float>(range_min_y * TILE_SIZE + base_screen_y);
+							const float right = static_cast<float>((range_max_x + 1) * TILE_SIZE + base_screen_x);
+							const float bottom = static_cast<float>((range_max_y + 1) * TILE_SIZE + base_screen_y);
+							const float visible_left = static_cast<float>(visible_min_x * TILE_SIZE + base_screen_x);
+							const float visible_top = static_cast<float>(visible_min_y * TILE_SIZE + base_screen_y);
+							const float visible_right = static_cast<float>((visible_max_x + 1) * TILE_SIZE + base_screen_x);
+							const float visible_bottom = static_cast<float>((visible_max_y + 1) * TILE_SIZE + base_screen_y);
+							const float visible_width = visible_right - visible_left;
+							const float visible_height = visible_bottom - visible_top;
+							const float edge_alpha = 0.85f;
+							const float top_depth = calculateTileDepth(range_min_x, range_min_y, RenderSublayer::GroundOverlay);
+							const float bottom_depth = calculateTileDepth(range_min_x, range_max_y, RenderSublayer::GroundOverlay);
+							const float left_depth = calculateTileDepth(range_min_x, range_min_y, RenderSublayer::GroundOverlay);
+							const float right_depth = calculateTileDepth(range_max_x, range_min_y, RenderSublayer::GroundOverlay);
+							if (range_min_y >= min_y && range_min_y <= max_y)
+								sprite_batch.draw(visible_left, top, visible_width, edge_width, *white_pixel, color.r, color.g, color.b, edge_alpha, 0.0f, 0u, top_depth);
+							if (range_max_y >= min_y && range_max_y <= max_y)
+								sprite_batch.draw(visible_left, bottom - edge_width, visible_width, edge_width, *white_pixel, color.r, color.g, color.b, edge_alpha, 0.0f, 0u, bottom_depth);
+							if (range_min_x >= min_x && range_min_x <= max_x)
+								sprite_batch.draw(left, visible_top, edge_width, visible_height, *white_pixel, color.r, color.g, color.b, edge_alpha, 0.0f, 0u, left_depth);
+							if (range_max_x >= min_x && range_max_x <= max_x)
+								sprite_batch.draw(right - edge_width, visible_top, edge_width, visible_height, *white_pixel, color.r, color.g, color.b, edge_alpha, 0.0f, 0u, right_depth);
+						}
+					}
+
+				}
+
+				for (const Position& pos : zone.explicit_positions) {
+					if (pos.z != z || pos.x < min_x || pos.x > max_x || pos.y < min_y || pos.y > max_y) {
+						continue;
+					}
+					const float fx = static_cast<float>(pos.x * TILE_SIZE + base_screen_x);
+					const float fy = static_cast<float>(pos.y * TILE_SIZE + base_screen_y);
+					const float depth = calculateTileDepth(pos.x, pos.y, RenderSublayer::GroundOverlay);
+					sprite_batch.draw(fx, fy, tile_size, tile_size, *white_pixel, color.r, color.g, color.b, 0.18f, 0.0f, 0u, depth);
+				}
+			}
+		}
+	}
+
+	if (!map.supportsZones()) {
 		return;
 	}
 
@@ -825,6 +925,33 @@ void ZoneOverlayDrawer::drawFloorBadges(SpriteBatch& sprite_batch,
 		for (const auto& b : spawn_badges_) {
 			sprite_batch.draw(b.x, b.y, b.w, b.h, *white_pixel, 1.0f, 1.0f, 1.0f, b.alpha,
 			                  0.0f, MakeIndicatorZoneFlag(static_cast<uint8_t>(TileIndicatorType::Spawn)), b.depth);
+		}
+	}
+
+	// Fixed spawn entries have known offsets from their zone origin, so the
+	// document cache can expose their absolute map positions. Relative spawns
+	// deliberately provide no markers because their runtime positions vary.
+	if (options.show_spawns && map.blacktek_zones.isEnabled() && view.zoom <= kZoomLODCutoff) {
+		const ViewBounds bounds = view.getBoundsForFloor(z);
+		const int min_x = std::max(bounds.start_x, 0);
+		const int max_x = bounds.end_x;
+		const int min_y = std::max(bounds.start_y, 0);
+		const int max_y = bounds.end_y;
+		sprite_batch.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, atlas);
+		for (const BlackTekZoneGeometry& zone : map.blacktek_zones.geometry()) {
+			for (const Position& pos : zone.fixed_entry_positions) {
+				if (pos.z != z || pos.x < min_x || pos.x > max_x || pos.y < min_y || pos.y > max_y) {
+					continue;
+				}
+				int draw_x = 0;
+				int draw_y = 0;
+				if (!view.IsTileVisible(pos.x, pos.y, pos.z, draw_x, draw_y)) {
+					continue;
+				}
+				const float depth = calculateTileDepth(pos.x, pos.y, RenderSublayer::Overlay);
+				sprite_batch.draw(static_cast<float>(draw_x + 12), static_cast<float>(draw_y + 12), 8.0f, 8.0f,
+				                 *white_pixel, 1.0f, 0.72f, 0.12f, 0.95f, 0.0f, 0u, depth);
+			}
 		}
 	}
 }

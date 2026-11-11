@@ -58,6 +58,7 @@
 #pragma comment(lib, "winmm.lib")
 #endif
 #include <chrono>
+#include <filesystem>
 #include <thread>
 
 wxIMPLEMENT_APP_NO_MAIN(Application);
@@ -268,10 +269,11 @@ bool Application::OnInit() {
 
 	FileName save_failed_file = FileSystem::GetLocalDataDirectory();
 	save_failed_file.SetName(".saving.txt");
+	bool keep_recovery_marker = false;
 	if (save_failed_file.FileExists()) {
 		std::ifstream f(nstr(save_failed_file.GetFullPath()).c_str(), std::ios::in);
 
-		std::string backup_otbm, backup_house, backup_spawn, backup_monster, backup_npc, backup_zone, backup_waypoint;
+		std::string backup_otbm, backup_house, backup_spawn, backup_monster, backup_npc, backup_zone, backup_waypoint, backup_blacktek_zones;
 
 		getline(f, backup_otbm);
 		getline(f, backup_house);
@@ -280,13 +282,15 @@ bool Application::OnInit() {
 		getline(f, backup_npc);
 		getline(f, backup_zone);
 		getline(f, backup_waypoint);
+		getline(f, backup_blacktek_zones);
 
 		// Remove the file
 		f.close();
-		std::remove(nstr(save_failed_file.GetFullPath()).c_str());
 
-		// Query file retrieval if possible
-		if (!backup_otbm.empty()) {
+		// Query file retrieval if any map or companion data needs recovery.
+		const bool has_recovery_entries = !backup_otbm.empty() || !backup_house.empty() || !backup_spawn.empty() ||
+			!backup_monster.empty() || !backup_npc.empty() || !backup_zone.empty() || !backup_waypoint.empty() || !backup_blacktek_zones.empty();
+		if (has_recovery_entries) {
 			wxString files_msg = wxstr(backup_otbm);
 			if (!backup_house.empty()) files_msg << "\n" << wxstr(backup_house);
 			if (!backup_spawn.empty()) files_msg << "\n" << wxstr(backup_spawn);
@@ -294,6 +298,7 @@ bool Application::OnInit() {
 			if (!backup_npc.empty()) files_msg << "\n" << wxstr(backup_npc);
 			if (!backup_zone.empty()) files_msg << "\n" << wxstr(backup_zone);
 			if (!backup_waypoint.empty()) files_msg << "\n" << wxstr(backup_waypoint);
+			if (!backup_blacktek_zones.empty()) files_msg << "\n" << wxstr(backup_blacktek_zones);
 
 			long ret = DialogUtil::PopupDialog(
 				"Editor Crashed",
@@ -306,11 +311,30 @@ bool Application::OnInit() {
 
 			if (ret == wxID_YES) {
 				// Recover if the user so wishes
-				auto restoreFile = [](const std::string& path) {
+				bool restore_failed = false;
+				auto restoreFile = [&restore_failed](const std::string& path) {
 					if (!path.empty() && path.back() == '~') {
 						std::string target = path.substr(0, path.size() - 1);
-						std::remove(target.c_str());
-						std::rename(path.c_str(), target.c_str());
+						std::error_code ec;
+						if (!std::filesystem::exists(path, ec) || ec) {
+							return;
+						}
+						const bool backup_is_directory = std::filesystem::is_directory(path, ec) && !ec;
+						if (backup_is_directory) {
+							std::filesystem::remove_all(target, ec);
+						} else {
+							std::filesystem::remove(target, ec);
+						}
+						if (ec) {
+							spdlog::error("Failed to remove partial save target '{}': {}", target, ec.message());
+							restore_failed = true;
+							return;
+						}
+						std::filesystem::rename(path, target, ec);
+						if (ec) {
+							spdlog::error("Failed to restore save backup '{}' -> '{}': {}", path, target, ec.message());
+							restore_failed = true;
+						}
 					}
 				};
 
@@ -321,12 +345,22 @@ bool Application::OnInit() {
 				restoreFile(backup_npc);
 				restoreFile(backup_zone);
 				restoreFile(backup_waypoint);
+				restoreFile(backup_blacktek_zones);
+				if (!restore_failed) {
+					std::remove(nstr(save_failed_file.GetFullPath()).c_str());
+				} else {
+					keep_recovery_marker = true;
+				}
 
-				// Load the map
-				g_gui.LoadMap(wxstr(backup_otbm.substr(0, backup_otbm.size() - 1)));
-				return true;
+				if (!backup_otbm.empty()) {
+					g_gui.LoadMap(wxstr(backup_otbm.substr(0, backup_otbm.size() - 1)));
+					return true;
+				}
 			}
 		}
+	}
+	if (!keep_recovery_marker) {
+		std::remove(nstr(save_failed_file.GetFullPath()).c_str());
 	}
 	// Keep track of first event loop entry
 	m_startup = true;

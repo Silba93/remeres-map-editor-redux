@@ -30,10 +30,13 @@
 #include <vector>
 
 class Editor;
+class Map;
 class Tile;
 class House;
 class Waypoint;
 class Town;
+class BlackTekZoneDocument;
+struct BlackTekZoneRecord;
 class Change;
 class Action;
 class BatchAction;
@@ -45,6 +48,7 @@ enum ChangeType {
 	CHANGE_MOVE_HOUSE_EXIT,
 	CHANGE_MOVE_WAYPOINT,
 	CHANGE_MOVE_TOWN_TEMPLE,
+	CHANGE_BLACKTEK_ZONES,
 };
 
 struct HouseExitChangeData {
@@ -62,18 +66,27 @@ struct TownTempleChangeData {
 	Position pos;
 };
 
+struct BlackTekZoneChangeData {
+	std::string name;
+	std::unique_ptr<BlackTekZoneRecord> record;
+	bool exists = false;
+};
+
 class Change {
 private:
-	using Data = std::variant<std::monostate, std::unique_ptr<Tile>, HouseExitChangeData, WaypointChangeData, TownTempleChangeData>;
+	using Data = std::variant<std::monostate, std::unique_ptr<Tile>, HouseExitChangeData, WaypointChangeData, TownTempleChangeData, std::unique_ptr<BlackTekZoneDocument>, BlackTekZoneChangeData>;
 	ChangeType type;
 	Position position;
 	Data data;
 
 	Change();
+	void swapBlackTekZones(Map& map);
 
 public:
 	explicit Change(std::unique_ptr<Tile> tile);
 	Change(std::unique_ptr<Tile> tile, const Position& pos);
+	explicit Change(std::unique_ptr<BlackTekZoneDocument> document);
+	explicit Change(BlackTekZoneRecord record);
 	static Change* Create(House* house, const Position& where);
 	static Change* Create(Waypoint* wp, const Position& where);
 	static Change* Create(Town* town, const Position& where);

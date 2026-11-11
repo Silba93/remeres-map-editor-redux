@@ -14,6 +14,8 @@
 #include <vector>
 
 class Brush;
+class wxChoice;
+class wxListBox;
 
 class ZonePalettePanel : public PalettePanel {
 public:
@@ -46,12 +48,15 @@ public:
 
 	void SelectZoneById(uint16_t zone_id, int cluster = -1);
 	[[nodiscard]] uint16_t GetSelectedZoneId() const { return selected_zone_id_; }
+	void SelectBlackTekZone(std::string name);
 
 	// Actions
 	void OnClickAddZone();
 	void OnClickRenameZone();
 	void OnClickRemoveZone();
 	void OnGoToZone();
+	void OnManageBlackTekZones();
+	void OnZoneModeChanged(wxCommandEvent& event);
 
 	void ExpandAll();
 	void CollapseAll();
@@ -62,13 +67,17 @@ private:
 	Map* map_ = nullptr;
 	uint16_t selected_zone_id_ = 0;
 	int selected_cluster_ = -1;
+	bool blacktek_mode_ = false;
 
+	wxChoice* mode_choice_ = nullptr;
+	wxListBox* blacktek_list_ = nullptr;
 	TilesetGridToolbar* toolbar_ = nullptr;
 	ZoneCanvas* canvas_ = nullptr;
 
 	wxButton* add_button_ = nullptr;
 	wxButton* rename_button_ = nullptr;
 	wxButton* remove_button_ = nullptr;
+	wxButton* goto_button_ = nullptr;
 };
 
 #endif // RME_PALETTE_ZONES_H_

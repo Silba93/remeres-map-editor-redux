@@ -33,4 +33,28 @@ framework.test("getTile basic", function()
     framework.assert(type(tile) == "table" or type(tile) == "userdata" or type(tile) == "nil", "getTile should return tile or nil")
 end)
 
+framework.test("BlackTek zone transaction rollback preserves unknown fields", function()
+    if not app.hasMap() then return end
+    local map = app.map
+    local name = "__rme_blacktek_transaction_test__"
+    if map:getBlacktekZone(name) ~= nil then return end
+    local enabled_before = map.blacktekZonesEnabled
+    local ok = pcall(function()
+        app.transaction("BlackTek rollback test", function()
+            map:setBlacktekZone(name, [[
+positions = ["100:100:7"]
+flags = ["no_party", "future_flag"]
+future_setting = { retained = true }
+]])
+            local text = map:getBlacktekZone(name)
+            framework.assert(text:find("future_setting", 1, true) ~= nil, "Unknown settings must survive")
+            framework.assert(text:find("future_flag", 1, true) ~= nil, "Unknown flags must survive")
+            error("intentional rollback")
+        end)
+    end)
+    framework.assert(not ok, "Transaction must propagate script errors")
+    framework.assert(map:getBlacktekZone(name) == nil, "Rollback must remove the added zone")
+    framework.assert(map.blacktekZonesEnabled == enabled_before, "Rollback must restore format selection")
+end)
+
 framework.summary()

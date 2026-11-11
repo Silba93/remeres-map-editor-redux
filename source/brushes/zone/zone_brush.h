@@ -29,13 +29,17 @@ public:
 
 	void setZone(uint16_t id) noexcept {
 		zone_id = id;
+		blacktek_mode = false;
 	}
+	void setBlackTekMode() noexcept { blacktek_mode = true; }
+	[[nodiscard]] bool isBlackTekMode() const noexcept { return blacktek_mode; }
 	[[nodiscard]] uint16_t getZone() const noexcept {
 		return zone_id;
 	}
 
 private:
 	uint16_t zone_id = 0;
+	bool blacktek_mode = false;
 };
 
 #endif

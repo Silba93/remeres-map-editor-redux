@@ -20,8 +20,13 @@
 
 #include "lua_sol_config.h"
 
+class Map;
+class BlackTekZoneDocument;
+
 namespace LuaAPI {
 	void registerApp(sol::state& lua);
+	// Joins the active script transaction, or creates an undoable editor action.
+	void applyBlackTekZones(Map* map, BlackTekZoneDocument document);
 }
 
 #endif // RME_LUA_API_APP_H

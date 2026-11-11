@@ -4,6 +4,7 @@
 #include "ui/gui.h"
 #include "app/preferences.h"
 #include "map/map.h"
+#include "editor/editor.h"
 #include <format>
 
 ViewSettingsHandler::ViewSettingsHandler(MainMenuBar* menuBar) :
@@ -50,7 +51,8 @@ void ViewSettingsHandler::LoadValues() {
 
 	menuBar->CheckItem(AUTOMAGIC, g_settings.getBoolean(Config::USE_AUTOMAGIC));
 
-	const bool supports_zones = g_gui.IsEditorOpen() && g_gui.GetCurrentMap().supportsZones();
+	const Editor* editor = g_gui.GetCurrentEditor();
+	const bool supports_zones = editor && (editor->map.supportsZones() || editor->map.blacktek_zones.isEnabled());
 
 	menuBar->CheckItem(SHOW_SHADE, g_settings.getBoolean(Config::SHOW_SHADE));
 	menuBar->CheckItem(SHOW_INGAME_BOX, g_settings.getBoolean(Config::SHOW_INGAME_BOX));
@@ -97,7 +99,8 @@ void ViewSettingsHandler::OnChangeViewSettings(wxCommandEvent& event) {
 	bool old_ghost = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
 	bool old_ghost_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
 
-	const bool supports_zones = g_gui.IsEditorOpen() && g_gui.GetCurrentMap().supportsZones();
+	const Editor* editor = g_gui.GetCurrentEditor();
+	const bool supports_zones = editor && (editor->map.supportsZones() || editor->map.blacktek_zones.isEnabled());
 
 	const ActionID action_id = static_cast<ActionID>(event.GetId() - (wxID_HIGHEST + 1));
 	if (action_id == SHOW_ALL_FLOORS) {

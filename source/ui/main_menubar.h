@@ -96,6 +96,7 @@ namespace MenuBar {
 		MAP_REMOVE_UNREACHABLE_TILES,
 		MAP_CLEAN_HOUSE_ITEMS,
 		MAP_PROPERTIES,
+		MAP_BLACKTEK_ZONES,
 		MAP_STATISTICS,
 		MAP_VALIDATE_SPAWNS,
 		VIEW_TOOLBARS_BRUSHES,
@@ -293,6 +294,7 @@ public:
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapCleanInvalidZones(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
+	void OnBlackTekZones(wxCommandEvent& event);
 
 	void OnToolbars(wxCommandEvent& event);
 	void OnNewView(wxCommandEvent& event);

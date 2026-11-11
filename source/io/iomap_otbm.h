@@ -108,6 +108,7 @@ public:
 
 	bool loadMap(Map& map, const FileName& identifier) override;
 	bool saveMap(Map& map, const FileName& identifier) override;
+	bool saveMapWithRecovery(Map& map, const FileName& identifier);
 
 protected:
 	static bool getVersionInfo(NodeFileReadHandle* f, MapVersion& out_ver);
@@ -116,7 +117,7 @@ protected:
 	bool loadMapFast(Map& map, const uint8_t* data, size_t size);
 
 
-	bool saveMapToDisk(Map& map, const FileName& identifier);
+	bool saveMapToDisk(Map& map, const FileName& identifier, bool retain_blacktek_recovery = false);
 
 	bool saveMap(Map& map, NodeFileWriteHandle& handle);
 

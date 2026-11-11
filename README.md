@@ -20,6 +20,7 @@
 
 ### Support
 - Support for multiple asset modes: OTB+DAT, DAT ONLYm even SRV. 
+- [BlackTek zones and spawns](BLACKTEK_ZONES.md): TOML zone authoring, spawn policies, coverage painting, and Lua access.
 
 ### Palettes & Quality of Life
 - Completely modular dynamic palettes: tilesets are no longer hardcoded into the binary. They are split into clean folders (`terrain`, `doodad`, `creatures`, `items`, `raw`).

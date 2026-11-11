@@ -95,6 +95,7 @@ void MenuBarActionManager::RegisterActions(MainMenuBar* mb, std::unordered_map<s
 	MAKE_ACTION_ICON(MAP_CLEAN_INVALID_ZONES, wxITEM_NORMAL, ICON_BROOM, OnMapCleanInvalidZones);
 	MAKE_ACTION_ICON(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, ICON_HOUSE_MEDICAL, OnMapCleanHouseItems);
 	MAKE_ACTION_ICON(MAP_PROPERTIES, wxITEM_NORMAL, ICON_GEAR, OnMapProperties);
+	MAKE_ACTION_ICON(MAP_BLACKTEK_ZONES, wxITEM_NORMAL, ICON_GEAR, OnBlackTekZones);
 	MAKE_ACTION_ICON(MAP_STATISTICS, wxITEM_NORMAL, ICON_CHART_BAR, OnMapStatistics);
 	MAKE_ACTION_ICON(MAP_VALIDATE_SPAWNS, wxITEM_NORMAL, ICON_TRIANGLE_EXCLAMATION, OnMapValidateSpawns);
 
@@ -267,8 +268,8 @@ void MenuBarActionManager::UpdateState(MainMenuBar* mb) {
 	mb->EnableItem(JUMP_TO_BRUSH, loaded);
 	mb->EnableItem(JUMP_TO_ITEM_BRUSH, loaded);
 
-	const bool is_otbm5 = has_map && g_gui.GetCurrentMap().supportsZones();
-	mb->EnableItem(SHOW_ZONES, is_otbm5);
+	const bool supports_zone_overlays = editor && (editor->map.supportsZones() || editor->map.blacktek_zones.isEnabled());
+	mb->EnableItem(SHOW_ZONES, supports_zone_overlays);
 	mb->EnableItem(ALWAYS_SHOW_ZONES, has_map);
 	mb->EnableItem(SHOW_INVALID_ZONES, has_map);
 	mb->EnableItem(MAP_REMOVE_ITEMS, is_host);
@@ -283,6 +284,7 @@ void MenuBarActionManager::UpdateState(MainMenuBar* mb) {
 
 	mb->EnableItem(MAP_CLEANUP, is_local);
 	mb->EnableItem(MAP_PROPERTIES, is_local);
+	mb->EnableItem(MAP_BLACKTEK_ZONES, is_local);
 	mb->EnableItem(MAP_STATISTICS, is_local);
 	mb->EnableItem(MAP_VALIDATE_SPAWNS, has_map);
 

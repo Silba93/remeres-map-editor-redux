@@ -1,0 +1,119 @@
+[FlagsOnly]
+positions = ["100:100:7", "101:100:7"]
+flags = [
+    "protection",
+    "nopvp",
+    "pvp",
+    "nologout",
+    "no_experience",
+    "no_trading",
+    "no_transaction",
+    "no_party",
+    "no_drop",
+    "no_death",
+    "no_death_penalty",
+    "no_equipment_loss",
+    "no_summons",
+    "ghost",
+    "no_pathfinding",
+    "no_walk",
+    "no_monsters",
+    "no_npcs",
+]
+
+[FixedMonster]
+range = { start = "200:200:7", end = "204:204:7" }
+spawn_type = "monster"
+policy = "fixed"
+cooldown = 5
+passive = true
+forced = true
+monsters = [
+    { position = "1:1:0", name = "Demon", chance = 90, interval = 30 },
+    { position = "3:3:0", list = [{ name = "Dragon", chance = 75 }, { name = "Dragon Lord", chance = 25 }] },
+]
+
+[RelativeMonster]
+positions = ["300:300:7"]
+spawn_type = "monster"
+policy = "relative"
+monsters = [{ position = "0:0:0", name = "Rat" }]
+
+[StagedMonster]
+range = { start = "400:400:7", end = "404:404:7" }
+spawn_type = "monster"
+policy = "staged"
+timed = true
+rebootable = true
+resumable = true
+degradable = true
+weekdays = ["monday", "wednesday", "friday"]
+monsters = [
+    { position = "1:1:0", name = "Demon", wave = 1 },
+    { position = "2:2:0", name = "Orshabaal", wave = 2 },
+]
+
+[TriggeredMonster]
+positions = ["500:500:7"]
+spawn_type = "monster"
+policy = "triggered"
+trigger = "Enter"
+monsters = [{ position = "0:0:0", name = "Rat" }]
+
+[FixedNpc]
+range = { start = "600:600:7", end = "604:604:7" }
+spawn_type = "npc"
+policy = "fixed"
+npcs = [{ position = "1:1:0", name = "Oracle", interval = 60 }]
+
+[RelativeNpc]
+positions = ["700:700:7"]
+spawn_type = "npc"
+policy = "relative"
+npcs = [{ position = "0:0:0", name = "Oracle" }]
+
+[FixedBoss]
+range = { start = "800:800:7", end = "808:808:7" }
+spawn_type = "boss"
+policy = "fixed"
+minion_behavior = "despawn_on_master_death"
+master = { position = "4:4:0", name = "Demon" }
+minions = [
+    { position = "2:2:0", name = "Fire Elemental", delay = 5 },
+    { position = "6:6:0", name = "Fire Elemental", delay = 10 },
+]
+
+[RelativeBoss]
+positions = ["900:900:7"]
+spawn_type = "boss"
+policy = "relative"
+minion_behavior = "finish_life_only"
+master = { position = "0:0:0", name = "Demon" }
+minions = [{ position = "1:0:0", name = "Fire Elemental" }]
+
+[StagedBoss]
+positions = ["1000:1000:7"]
+spawn_type = "boss"
+policy = "staged"
+minion_behavior = "independent_respawn"
+master = { position = "0:0:0", name = "Demon" }
+
+[TriggeredBoss]
+positions = ["1100:1100:7"]
+spawn_type = "boss"
+policy = "triggered"
+trigger = "Kill"
+master = { position = "0:0:0", name = "Demon" }
+
+[EveryParsedTrigger]
+positions = ["1200:1200:7"]
+spawn_type = "monster"
+policy = "triggered"
+trigger = "LeaveBattle"
+
+[FutureItemSpawn]
+positions = ["1300:1300:7"]
+spawn_type = "item"
+policy = "fixed"
+item_entries = [{ id = 12345, chance = 100 }]
+future_server_option = { retain = true, values = [1, 2, 3] }

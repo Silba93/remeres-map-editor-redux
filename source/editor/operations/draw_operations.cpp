@@ -5,6 +5,7 @@
 #include "app/main.h"
 #include <format>
 #include "editor/operations/draw_operations.h"
+#include "editor/operations/blacktek_zone_operations.h"
 #include <unordered_set>
 #include <array>
 #include "editor/editor.h"
@@ -23,6 +24,7 @@
 #include "brushes/table/table_brush.h"
 #include "brushes/creature/creature_brush.h"
 #include "brushes/spawn/spawn_brush.h"
+#include "brushes/zone/zone_brush.h"
 #include "brushes/door/door_brush.h"
 #include "game/town.h"
 #include "map/map.h"
@@ -31,6 +33,17 @@
 #include "app/settings.h"
 
 namespace {
+
+	bool drawBlackTekZone(Editor& editor, Brush* brush, std::span<const Position> positions, bool dodraw) {
+		if (!brush || !brush->is<ZoneBrush>() || !brush->as<ZoneBrush>()->isBlackTekMode()) {
+			return false;
+		}
+		std::string error;
+		if (!BlackTekZoneOperations::paint(editor, editor.map.selected_blacktek_zone, positions, !dodraw, error)) {
+			g_gui.SetStatusText(wxstr(error));
+		}
+		return true;
+	}
 
 	void drawDoodad(Editor& editor, DoodadBrush* brush, Position offset, bool alt, bool dodraw) {
 		std::unique_ptr<BatchAction> batch = editor.actionQueue->createBatch(ACTION_DRAW);
@@ -302,6 +315,7 @@ namespace {
 
 void DrawOperations::draw(Editor& editor, Position offset, bool alt, bool dodraw) {
 	Brush* brush = g_gui.GetCurrentBrush();
+	if (drawBlackTekZone(editor, brush, std::span<const Position>(&offset, 1), dodraw)) return;
 	if (!brush) {
 		return;
 	}
@@ -433,6 +447,7 @@ void DrawOperations::draw(Editor& editor, Position offset, bool alt, bool dodraw
 
 void DrawOperations::draw(Editor& editor, const PositionVector& tilestodraw, bool alt, bool dodraw) {
 	Brush* brush = g_gui.GetCurrentBrush();
+	if (drawBlackTekZone(editor, brush, tilestodraw, dodraw)) return;
 	if (!brush) {
 		return;
 	}
@@ -498,6 +513,7 @@ void DrawOperations::draw(Editor& editor, const PositionVector& tilestodraw, boo
 
 void DrawOperations::draw(Editor& editor, const PositionVector& tilestodraw, PositionVector& tilestoborder, bool alt, bool dodraw) {
 	Brush* brush = g_gui.GetCurrentBrush();
+	if (drawBlackTekZone(editor, brush, tilestodraw, dodraw)) return;
 	if (!brush) {
 		return;
 	}

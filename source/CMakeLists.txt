@@ -68,6 +68,7 @@ set(rme_H
     ${CMAKE_CURRENT_LIST_DIR}/editor/editor_factory.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/copy_operations.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/draw_operations.h
+    ${CMAKE_CURRENT_LIST_DIR}/editor/operations/blacktek_zone_operations.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/selection_operations.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/map_version_changer.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/unreachable_cleaner.h
@@ -96,6 +97,7 @@ set(rme_H
     ${CMAKE_CURRENT_LIST_DIR}/game/material_manifest.h
     ${CMAKE_CURRENT_LIST_DIR}/game/outfit.h
     ${CMAKE_CURRENT_LIST_DIR}/game/spawn.h
+    ${CMAKE_CURRENT_LIST_DIR}/game/blacktek_zones.h
     ${CMAKE_CURRENT_LIST_DIR}/game/sprites.h
     ${CMAKE_CURRENT_LIST_DIR}/game/town.h
     ${CMAKE_CURRENT_LIST_DIR}/game/preview_preferences.h
@@ -299,6 +301,7 @@ set(rme_H
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/goto_position_dialog.h
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/remove_unreachable_dialog.h
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/spawn_validator_window.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/blacktek_zones_window.h
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/collection_extractor_service.h
     ${CMAKE_CURRENT_LIST_DIR}/io/collection_xml_service.h
     ${CMAKE_CURRENT_LIST_DIR}/palette/managers/collection_palette_sync.h
@@ -526,6 +529,7 @@ set(rme_SRC
     ${CMAKE_CURRENT_LIST_DIR}/editor/editor_factory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/copy_operations.cpp
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/draw_operations.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/editor/operations/blacktek_zone_operations.cpp
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/selection_operations.cpp
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/map_version_changer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/editor/operations/unreachable_cleaner.cpp
@@ -552,6 +556,7 @@ set(rme_SRC
     ${CMAKE_CURRENT_LIST_DIR}/game/material_include_resolver.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game/material_manifest.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game/spawn.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/game/blacktek_zones.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game/town.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game/preview_preferences.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game/waypoints.cpp
@@ -724,6 +729,7 @@ set(rme_SRC
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/goto_position_dialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/remove_unreachable_dialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/spawn_validator_window.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui/dialogs/blacktek_zones_window.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui/properties/object_properties_base.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui/properties/property_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui/properties/property_applier.cpp

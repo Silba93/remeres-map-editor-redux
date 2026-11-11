@@ -29,6 +29,7 @@
 #include "map/map_search.h"
 #include "ui/managers/recent_files_manager.h"
 #include "ui/map/map_properties_window.h"
+#include "ui/dialogs/blacktek_zones_window.h"
 
 #include "ui/about_window.h"
 #include "ui/dat_debug_view.h"
@@ -506,6 +507,12 @@ void MainMenuBar::OnMapProperties(wxCommandEvent& WXUNUSED(event)) {
 		g_gui.CloseAllEditors();
 	}
 	properties->Destroy();
+}
+
+void MainMenuBar::OnBlackTekZones(wxCommandEvent&) {
+	if (Editor* editor = g_gui.GetCurrentEditor()) {
+		BlackTekZonesWindow::ShowForEditor(frame, *editor);
+	}
 }
 
 void MainMenuBar::OnToolbars(wxCommandEvent& event) {
